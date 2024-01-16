@@ -1,0 +1,5 @@
+{
+    "nodejs_path": "/usr/robot-software/node/bin/node",
+    "bootstrap_execute": [],
+    "node_apps": []
+}

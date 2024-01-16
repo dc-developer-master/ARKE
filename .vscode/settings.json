@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.ejs": "html",
+        "*.proto": "proto3",
+        "*.tcc": "cpp",
+        "algorithm": "cpp"
+    }
+}
