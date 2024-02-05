@@ -8,6 +8,8 @@
 #include <driver/i2s.h>
 #include <Deneyap_6EksenAtaletselOlcumBirimi.h>
 #include "deneyap.h"
+#include <mdns.h>
+#include <esp_websocket_client.h>
 
 #define PART_BOUNDARY "123456789000000000000987654321"
 
@@ -23,7 +25,10 @@ const char* IMU_JSON_RES = "{\"acceleration\": {\"x\": %f, \"y\": %f, \"z\": %f}
 
 esp_err_t camstream_url_handler(httpd_req_t* request);
 esp_err_t imustream_uri_handler(httpd_req_t* request);
+esp_err_t ws_connect_url_handler(httpd_req_t* request);
 httpd_handle_t camstream_httpd_initialize();
+
+void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int32_t handler_call_reason, void* event_data);
 
 
 httpd_uri_t camstream_uri = {
@@ -37,6 +42,13 @@ httpd_uri_t imustream_uri = {
     .uri = "/imustream",
     .method = HTTP_GET,
     .handler = imustream_uri_handler,
+    .user_ctx = NULL
+};
+
+httpd_uri_t ws_connect_uri = {
+    .uri = "/connect_ws",
+    .method = HTTP_GET,
+    .handler = ws_connect_url_handler,
     .user_ctx = NULL
 };
 
@@ -57,6 +69,25 @@ void setup() {
 
     Serial.println("\\\x6e\\Connected");
     Serial.println(WiFi.localIP());
+
+    Serial.printf(
+        "Xtal frequency = %d MHz\nCPU Operating Frequency = %d MHz\nAPB Bus Operating frequency = %d Hz\n",
+        getXtalFrequencyMhz(),
+        getCpuFrequencyMhz(),
+        getApbFrequency()
+    );
+    
+    if(mdns_init() != ESP_OK) {
+        Serial.println("Unable to start mdns");
+    }
+    
+    if(mdns_hostname_set("arke") != ESP_OK) {
+        Serial.println("Unable to set hostname");
+    }
+
+    if(mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0) != ESP_OK) {
+        Serial.println("Unable add service");
+    }
 
     Wire.begin(D10, D11);
 
@@ -103,7 +134,7 @@ void setup() {
     delay(5000);
 
     camera_fb_t* framebuffer = esp_camera_fb_get();
-    Serial.printf("%s", framebuffer->buf);
+    Serial.printf("%s\n", framebuffer->buf);
     esp_camera_fb_return(framebuffer);
 
     server = camstream_httpd_initialize();
@@ -151,6 +182,63 @@ esp_err_t imustream_uri_handler(httpd_req_t* request) {
     return ESP_OK;
 }
 
+esp_err_t ws_connect_url_handler(httpd_req_t* request) {
+
+    static esp_websocket_client_config_t ws_config = {0};
+
+    char * url_field_name = "Ws-Url";
+    char * port_field_name = "Ws-Port";
+    char url_buffer[64];
+    char port_buffer[8];
+    int port_num = 0;
+
+    httpd_req_get_hdr_value_str(request, url_field_name, url_buffer, 64);
+    httpd_req_get_hdr_value_str(request, port_field_name, port_buffer, 8);
+
+    sscanf(port_buffer, "%d", &port_num);
+
+    ws_config.uri = url_buffer;
+    ws_config.port = port_num;
+
+    esp_websocket_client_handle_t websocket_handle = esp_websocket_client_init(&ws_config);
+
+    esp_websocket_register_events(websocket_handle, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)websocket_handle);
+    esp_websocket_client_init(&ws_config);
+    esp_websocket_client_start(websocket_handle);
+
+    Serial.println("new ws");
+
+    return ESP_OK;
+}
+
+void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int32_t handler_call_reason, void* event_data) {
+
+    esp_websocket_event_data_t* data = (esp_websocket_event_data_t *) event_data;
+
+    switch(handler_call_reason) {
+        case WEBSOCKET_EVENT_CONNECTED:
+            Serial.println("Websocket connected");
+        break;
+        case WEBSOCKET_EVENT_DISCONNECTED:
+            esp_websocket_client_stop(data->client);
+
+            for (int reconnect_attempts = 0; reconnect_attempts > 5; reconnect_attempts++) {
+
+                if(esp_websocket_client_start(data->client) == ESP_OK && esp_websocket_client_is_connected(data->client)) {
+                    break;
+                }
+
+                vTaskDelay(2000 / portTICK_PERIOD_MS);
+            }
+        break;
+        case WEBSOCKET_EVENT_DATA:
+            Serial.printf("%s\n", (char *) data->data_ptr);
+        break;
+        case WEBSOCKET_EVENT_ERROR:
+        break;
+    }
+}
+
 httpd_handle_t camstream_httpd_initialize() {
 
     httpd_config_t httpd_config = HTTPD_DEFAULT_CONFIG();
@@ -159,6 +247,7 @@ httpd_handle_t camstream_httpd_initialize() {
     if(httpd_start(&server, &httpd_config) == ESP_OK) {
         httpd_register_uri_handler(server, &camstream_uri);
         httpd_register_uri_handler(server, &imustream_uri);
+        httpd_register_uri_handler(server, &ws_connect_uri);
     }
     
     return server;
