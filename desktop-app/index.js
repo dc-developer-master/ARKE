@@ -1,8 +1,11 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
+const ws = require("ws");
 const hid = require("node-hid");
 const path = require("path");
 
 const device = new hid.HID(1133, 49685);
+const websocketServer = new ws.Server({ port: 4567 });
+
 
 function createWindow() {
     const window = new BrowserWindow({
@@ -27,7 +30,8 @@ app.whenReady().then(() => {
     });
 
     device.on("data", handle_hid);
-    
+
+    websocketServer.on("connection", websocketHandleConnection);
 });
 
 app.on("window-all-closed", () => {
@@ -65,4 +69,8 @@ function handle_hid(data) {
     };
     
     BrowserWindow.getAllWindows()[0].webContents.send("onSidestickInput", controls);
+}
+
+function websocketHandleConnection(socket, url) {
+    
 }
