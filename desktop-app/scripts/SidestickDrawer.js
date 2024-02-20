@@ -12,6 +12,13 @@ window.electronAPI.onSidestickInput(input => {
     drawSidestickPointer(input);
 });
 
+/**
+ * 
+ * @param {Number} x1 
+ * @param {Number} y1 
+ * @param {Number} x2 
+ * @param {Number} y2 
+ */
 
 function drawLine(x1, y1, x2, y2) {
     canvas.moveTo(x1, y1);

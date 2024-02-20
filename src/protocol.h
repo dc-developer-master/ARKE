@@ -1,6 +1,9 @@
 #pragma once
 #include <stdint.h>
 
+#define INPUT_TYPE_BASIC 0x01
+#define INPUT_TYPE_SIDESTICK 0x02
+
 typedef struct basic_input {
     uint8_t packet_id;
     uint8_t input_cmd;
