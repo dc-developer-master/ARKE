@@ -2,10 +2,14 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const ws = require("ws");
 const hid = require("node-hid");
 const path = require("path");
+const http = require("http");
+const axios = require("axios").default;
+const net = require("net");
 
 const device = new hid.HID(1133, 49685);
-const websocketServer = new ws.Server({ port: 4567 });
-
+const httpServer = http.createServer();
+const websocketServer = new ws.Server({ port: 4567 /* server: httpServer */ });
+var wsInstance = null;
 
 function createWindow() {
     const window = new BrowserWindow({
@@ -32,6 +36,10 @@ app.whenReady().then(() => {
     device.on("data", handle_hid);
 
     websocketServer.on("connection", websocketHandleConnection);
+
+    //httpServer.listen(4567);
+
+    initializeWebsocket("ws://192.168.1.12", 4567);
 });
 
 app.on("window-all-closed", () => {
@@ -71,6 +79,37 @@ function handle_hid(data) {
     BrowserWindow.getAllWindows()[0].webContents.send("onSidestickInput", controls);
 }
 
+ipcMain.on("onKeyboardInput", (event, key) => {
+    const buffer = Buffer.alloc(2);
+    buffer.writeInt8(0x01);
+    buffer.write(key);
+
+    wsInstance.send(buffer);
+    // delete buffer;
+});
+
 function websocketHandleConnection(socket, url) {
-    
+    wsInstance = socket;
+    console.log("connected");
+}
+
+function initializeWebsocket(wsUrl, wsPort) {
+    axios.get("http://arke.local/connect_ws", {
+        headers: {
+            "Ws-Url": wsUrl,
+            "Ws-Port": wsPort
+        }
+    });
+}
+
+function getSelfIP() {
+    var ip = null;
+    var socket = net.createConnection(80, "google.com");
+
+    socket.on("connect", () => {
+        ip = socket.address().address;
+        socket.end();
+    })
+
+    return ip;
 }

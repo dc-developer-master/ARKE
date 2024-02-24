@@ -7,6 +7,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
 contextBridge.exposeInMainWorld("electronAPI", {
     onSidestickInput: (callback) => ipcRenderer.on("onSidestickInput", (event, value) => callback(value)),
-    initializeWebsocket: (url) => ipcRenderer.send("initializeWebsocket", url),
-    sendToWebsocket: (data) => ipcRenderer.send("sendToWebsocket", data)
+    onKeyboardInput: (key) => ipcRenderer.send("onKeyboardInput", key),
+    //initializeWebsocket: () => ipcRenderer.send("initializeWebsocket")
 });
