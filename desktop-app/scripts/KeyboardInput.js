@@ -15,7 +15,7 @@ function handleKeyboardInput(document, event) {
     const key = event.key.replace("Key", "").toLowerCase();
 
     if(
-        !(key in ["n", "u", "d", "f", "b", "s"])
+        !(key in ["n", "u", "d", "f", "b", "s", "q"])
     ) {
         return;
     }

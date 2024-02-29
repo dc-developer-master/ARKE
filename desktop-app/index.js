@@ -5,7 +5,11 @@ const path = require("path");
 const http = require("http");
 const axios = require("axios").default;
 const net = require("net");
+
 const device = new hid.HID(1133, 49685);
+const httpServer = http.createServer();
+const websocketServer = new ws.Server({ port: 4567 /* server: httpServer */ });
+var wsInstance = null;
 
 function createWindow() {
     const window = new BrowserWindow({
@@ -33,8 +37,9 @@ app.whenReady().then(() => {
 
     websocketServer.on("connection", websocketHandleConnection);
 
+    //httpServer.listen(4567);
 
-    initializeWebsocket("ws://192.168.1.12", 4567);
+    initializeWebsocket("ws://192.168.1.12/", 4567);
 });
 
 app.on("window-all-closed", () => {
@@ -97,3 +102,14 @@ function initializeWebsocket(wsUrl, wsPort) {
     });
 }
 
+function getSelfIP() {
+    var ip = null;
+    var socket = net.createConnection(80, "google.com");
+
+    socket.on("connect", () => {
+        ip = socket.address().address;
+        socket.end();
+    })
+
+    return ip;
+}

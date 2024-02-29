@@ -7,9 +7,11 @@
 #include "soc/rtc_cntl_reg.h"
 #include <driver/i2s.h>
 #include <Deneyap_6EksenAtaletselOlcumBirimi.h>
+#include <Deneyap_CiftKanalliMotorSurucu.h>
 #include "deneyap.h"
 #include <mdns.h>
 #include <esp_websocket_client.h>
+#include "protocol.h"
 
 #define PART_BOUNDARY "123456789000000000000987654321"
 
@@ -46,13 +48,14 @@ httpd_uri_t imustream_uri = {
 };
 
 httpd_uri_t ws_connect_uri = {
-    .uri = "/connect_ws",
+    .uri = "/connect_socket",
     .method = HTTP_GET,
     .handler = ws_connect_url_handler,
     .user_ctx = NULL
 };
 
 LSM6DSM imu;
+DualMotorDriver motor_driver;
 
 void setup() {
 
@@ -96,6 +99,7 @@ void setup() {
     imu_config.accelRange = 16;
 
     (void) imu.begin(0x6a, &imu_config);
+    (void) motor_driver.begin(0x16);
 
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
@@ -166,6 +170,7 @@ esp_err_t camstream_url_handler(httpd_req_t* request) {
         esp_camera_fb_return(framebuffer);
     }
 
+
     return ESP_OK;
 }
 
@@ -184,7 +189,10 @@ esp_err_t imustream_uri_handler(httpd_req_t* request) {
 
 esp_err_t ws_connect_url_handler(httpd_req_t* request) {
 
-    static esp_websocket_client_config_t ws_config = {0};
+    esp_websocket_client_config_t ws_config = {};
+
+    ws_config.subprotocol = "soap";
+    ws_config.port = 4567;
 
     char * url_field_name = "Ws-Url";
     char * port_field_name = "Ws-Port";
@@ -198,7 +206,8 @@ esp_err_t ws_connect_url_handler(httpd_req_t* request) {
     sscanf(port_buffer, "%d", &port_num);
 
     ws_config.uri = url_buffer;
-    ws_config.port = port_num;
+
+    Serial.printf("%s:%d", url_buffer, port_num);
 
     esp_websocket_client_handle_t websocket_handle = esp_websocket_client_init(&ws_config);
 
@@ -206,7 +215,7 @@ esp_err_t ws_connect_url_handler(httpd_req_t* request) {
     esp_websocket_client_init(&ws_config);
     esp_websocket_client_start(websocket_handle);
 
-    Serial.println("new ws");
+    if(esp_websocket_client_is_connected(websocket_handle)) Serial.println("new ws");
 
     return ESP_OK;
 }
@@ -220,22 +229,54 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
             Serial.println("Websocket connected");
         break;
         case WEBSOCKET_EVENT_DISCONNECTED:
-            esp_websocket_client_stop(data->client);
-
-            for (int reconnect_attempts = 0; reconnect_attempts > 5; reconnect_attempts++) {
-
-                if(esp_websocket_client_start(data->client) == ESP_OK && esp_websocket_client_is_connected(data->client)) {
-                    break;
-                }
-
-                vTaskDelay(2000 / portTICK_PERIOD_MS);
-            }
+            
         break;
         case WEBSOCKET_EVENT_DATA:
-            Serial.printf("%s\n", (char *) data->data_ptr);
+            uint8_t packet_id = data->data_ptr[0];
+
+            handle_packet((char*) data->data_ptr, packet_id, data->data_len);
         break;
         case WEBSOCKET_EVENT_ERROR:
         break;
+    }
+}
+
+void handle_packet(char* data, uint8_t packet_id, uint16_t data_len) {
+    
+    if(packet_id == INPUT_TYPE_BASIC) {
+        basic_input* packet = (basic_input*) data;
+
+        switch(packet->input_cmd) {
+            case CMD_BEND_FORWARD:
+                // TODO: Add servo motor
+            break;
+            case CMD_BEND_UP:
+                // TODO: add bend up impl
+            break;
+            case CMD_BEND_DOWN:
+                // TODO: add bend down impl
+            break;
+            case CMD_GO_FORWARD:
+                motor_driver.MotorDrive(MOTOR1, 100, FORWARD);
+                motor_driver.MotorDrive(MOTOR2, 100, FORWARD);
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+            break;
+            case CMD_GO_BACKWARD:
+                motor_driver.MotorDrive(MOTOR1, -1, REVERSE);
+                motor_driver.MotorDrive(MOTOR2, -1, REVERSE);
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+            break;
+            case CMD_STOP_GOING:
+            break;
+            case CMD_SQUIRM:
+            break;
+        }
+    }
+
+    if(packet_id == INPUT_TYPE_SIDESTICK) {
+        sidestick_input* packet = (sidestick_input*) data;
+
+        //TODO: implement sidestick movement
     }
 }
 
