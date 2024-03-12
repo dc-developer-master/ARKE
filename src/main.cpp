@@ -48,7 +48,7 @@ httpd_uri_t imustream_uri = {
 };
 
 httpd_uri_t ws_connect_uri = {
-    .uri = "/connect_socket",
+    .uri = "/connect_ws",
     .method = HTTP_GET,
     .handler = ws_connect_url_handler,
     .user_ctx = NULL
@@ -121,7 +121,7 @@ void setup() {
     config.pin_pwdn = -1;
     config.pin_reset = -1;
     config.xclk_freq_hz = 15000000;
-    config.frame_size = FRAMESIZE_SVGA;
+    config.frame_size = FRAMESIZE_VGA;
     config.pixel_format = PIXFORMAT_JPEG;
     //config.pixel_format = PIXFORMAT_RGB565; // for face detection/recognition
     //config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
@@ -175,12 +175,25 @@ esp_err_t camstream_url_handler(httpd_req_t* request) {
 }
 
 esp_err_t imustream_uri_handler(httpd_req_t* request) {
+
+    float accel_x, accel_y, accel_z;
+    float gyro_x, gyro_y, gyro_z;
+    float temp;
+
+    imu.readAllAxesFloatData(&accel_x);
     
     char imu_res_buf[256];
-    int bytes_written = snprintf(imu_res_buf, 128, IMU_JSON_RES,
-        imu.readFloatAccelX(), imu.readFloatAccelY(), imu.readFloatAccelZ(),
-        imu.readFloatGyroX(), imu.readFloatGyroY(), imu.readFloatGyroZ()
+
+    int bytes_written = snprintf(imu_res_buf, 256, IMU_JSON_RES,
+        accel_x, accel_y, accel_y,
+        gyro_x, gyro_y, gyro_z
     );
+
+    // deprecated
+    // int bytes_written = snprintf(imu_res_buf, 256, IMU_JSON_RES,
+    //     imu.readFloatAccelX(), imu.readFloatAccelY(), imu.readFloatAccelZ(),
+    //     imu.readFloatGyroX(), imu.readFloatGyroY(), imu.readFloatGyroZ()
+    // );
 
     (void) httpd_resp_send(request, imu_res_buf, (size_t) bytes_written);
 
@@ -192,7 +205,6 @@ esp_err_t ws_connect_url_handler(httpd_req_t* request) {
     esp_websocket_client_config_t ws_config = {};
 
     ws_config.subprotocol = "soap";
-    ws_config.port = 4567;
 
     char * url_field_name = "Ws-Url";
     char * port_field_name = "Ws-Port";
@@ -206,6 +218,7 @@ esp_err_t ws_connect_url_handler(httpd_req_t* request) {
     sscanf(port_buffer, "%d", &port_num);
 
     ws_config.uri = url_buffer;
+    ws_config.port = port_num;
 
     Serial.printf("%s:%d", url_buffer, port_num);
 
@@ -216,6 +229,8 @@ esp_err_t ws_connect_url_handler(httpd_req_t* request) {
     esp_websocket_client_start(websocket_handle);
 
     if(esp_websocket_client_is_connected(websocket_handle)) Serial.println("new ws");
+
+    httpd_resp_send_404(request);
 
     return ESP_OK;
 }
@@ -232,53 +247,13 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
             
         break;
         case WEBSOCKET_EVENT_DATA:
-            uint8_t packet_id = data->data_ptr[0];
-
-            handle_packet((char*) data->data_ptr, packet_id, data->data_len);
+            Serial.printf("Data from ws\r\n%s\n", data->data_ptr);
         break;
         case WEBSOCKET_EVENT_ERROR:
         break;
     }
 }
 
-void handle_packet(char* data, uint8_t packet_id, uint16_t data_len) {
-    
-    if(packet_id == INPUT_TYPE_BASIC) {
-        basic_input* packet = (basic_input*) data;
-
-        switch(packet->input_cmd) {
-            case CMD_BEND_FORWARD:
-                // TODO: Add servo motor
-            break;
-            case CMD_BEND_UP:
-                // TODO: add bend up impl
-            break;
-            case CMD_BEND_DOWN:
-                // TODO: add bend down impl
-            break;
-            case CMD_GO_FORWARD:
-                motor_driver.MotorDrive(MOTOR1, 100, FORWARD);
-                motor_driver.MotorDrive(MOTOR2, 100, FORWARD);
-                vTaskDelay(100 / portTICK_PERIOD_MS);
-            break;
-            case CMD_GO_BACKWARD:
-                motor_driver.MotorDrive(MOTOR1, -1, REVERSE);
-                motor_driver.MotorDrive(MOTOR2, -1, REVERSE);
-                vTaskDelay(100 / portTICK_PERIOD_MS);
-            break;
-            case CMD_STOP_GOING:
-            break;
-            case CMD_SQUIRM:
-            break;
-        }
-    }
-
-    if(packet_id == INPUT_TYPE_SIDESTICK) {
-        sidestick_input* packet = (sidestick_input*) data;
-
-        //TODO: implement sidestick movement
-    }
-}
 
 httpd_handle_t camstream_httpd_initialize() {
 

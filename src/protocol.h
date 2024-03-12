@@ -14,12 +14,12 @@ enum {
     CMD_SQUIRM = (const uint8_t)'q'
 };
 
-typedef struct basic_input {
+typedef struct basic_input { // 2 byte
     uint8_t packet_id;
     uint8_t input_cmd;
 } basic_input;
 
-typedef struct sidestick_input {
+typedef struct sidestick_input { // 11 byte
     uint8_t packet_id;
     uint16_t x_axis;
     uint16_t y_axis;
@@ -28,3 +28,12 @@ typedef struct sidestick_input {
     uint8_t throttle;
     uint16_t buttons;
 } sidestick_input;
+
+typedef struct imu_output { // 12 byte
+    uint16_t gyro_x;
+    uint16_t gyro_y;
+    uint16_t gyro_z;
+    uint16_t accel_x;
+    uint16_t accel_y;
+    uint16_t accel_z;
+} imu_output;

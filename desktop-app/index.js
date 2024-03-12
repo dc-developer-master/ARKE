@@ -4,12 +4,11 @@ const hid = require("node-hid");
 const path = require("path");
 const http = require("http");
 const axios = require("axios").default;
-const net = require("net");
 
 const device = new hid.HID(1133, 49685);
-const httpServer = http.createServer();
-const websocketServer = new ws.Server({ port: 4567 /* server: httpServer */ });
-var wsInstance = null;
+const websocketServer = new ws.WebSocketServer({ port: 4567 });
+
+const client = {};
 
 function createWindow() {
     const window = new BrowserWindow({
@@ -25,6 +24,8 @@ function createWindow() {
 
 app.whenReady().then(() => {
 
+    initializeWebsocket("ws://172.20.10.5", 4567);
+
     createWindow();
 
     app.on("activate", () => {
@@ -36,11 +37,8 @@ app.whenReady().then(() => {
     device.on("data", handle_hid);
 
     websocketServer.on("connection", websocketHandleConnection);
-
-    //httpServer.listen(4567);
-
-    initializeWebsocket("ws://192.168.1.12/", 4567);
 });
+
 
 app.on("window-all-closed", () => {
     if(process.platform != "darwin") {
@@ -77,20 +75,28 @@ function handle_hid(data) {
     };
     
     BrowserWindow.getAllWindows()[0].webContents.send("onSidestickInput", controls);
+    const buffer = Buffer.alloc(11);
+    buffer.writeUInt8(0x02);
+    buffer.writeUInt16LE(controls.roll);
+    buffer.writeUInt16LE(controls.pitch);
+    buffer.writeUInt16LE(controls.yaw);
+    buffer.writeUInt8(controls.view);
+    buffer.writeUInt8(controls.throttle);
+    buffer.writeUint16LE(controls.buttons);
+    //websocketServer.clients[0].send(buffer);
 }
 
 ipcMain.on("onKeyboardInput", (event, key) => {
     const buffer = Buffer.alloc(2);
-    buffer.writeInt8(0x01);
+    buffer.writeUInt8(0x01);
     buffer.write(key);
 
-    wsInstance.send(buffer);
+    websocketServer.clients[0].send(buffer);
     // delete buffer;
 });
 
 function websocketHandleConnection(socket, url) {
-    wsInstance = socket;
-    console.log("connected");
+    socket.nrId = 0;
 }
 
 function initializeWebsocket(wsUrl, wsPort) {
