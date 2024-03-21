@@ -17,7 +17,7 @@ enum {
 typedef struct basic_input { // 2 byte
     uint8_t packet_id;
     uint8_t input_cmd;
-} basic_input;
+} __attribute__((packed)) basic_input;
 
 typedef struct sidestick_input { // 11 byte
     uint8_t packet_id;
@@ -27,7 +27,7 @@ typedef struct sidestick_input { // 11 byte
     uint8_t view;
     uint8_t throttle;
     uint16_t buttons;
-} sidestick_input;
+} __attribute__((packed)) sidestick_input;
 
 typedef struct imu_output { // 12 byte
     uint16_t gyro_x;
@@ -36,4 +36,4 @@ typedef struct imu_output { // 12 byte
     uint16_t accel_x;
     uint16_t accel_y;
     uint16_t accel_z;
-} imu_output;
+} __attribute__((packed)) imu_output;

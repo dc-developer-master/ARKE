@@ -1,4 +1,4 @@
 #pragma once
 
-#define WIFI_SSID "Kerem (2)" // "KEREM"
-#define WIFI_PASSWORD "644100g2330" // "05k01m09"
+#define WIFI_SSID "KEREM" // "KEREM"
+#define WIFI_PASSWORD "05k01m09" // "05k01m09"

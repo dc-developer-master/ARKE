@@ -24,7 +24,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
 
-    initializeWebsocket("ws://172.20.10.5", 4567);
+    initializeWebsocket("ws://192.168.1.8/", 4567);
 
     createWindow();
 
@@ -96,7 +96,8 @@ ipcMain.on("onKeyboardInput", (event, key) => {
 });
 
 function websocketHandleConnection(socket, url) {
-    socket.nrId = 0;
+    //socket.nrId = 0;
+    socket.send("hello");
 }
 
 function initializeWebsocket(wsUrl, wsPort) {

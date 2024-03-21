@@ -32,6 +32,7 @@ httpd_handle_t camstream_httpd_initialize();
 
 void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int32_t handler_call_reason, void* event_data);
 
+void motor_control_task(void* parameters);
 
 httpd_uri_t camstream_uri = {
     .uri = "/camstream",
@@ -56,6 +57,8 @@ httpd_uri_t ws_connect_uri = {
 
 LSM6DSM imu;
 DualMotorDriver motor_driver;
+
+TaskHandle_t* motor_control = NULL;
 
 void setup() {
 
@@ -92,7 +95,7 @@ void setup() {
         Serial.println("Unable add service");
     }
 
-    Wire.begin(D10, D11);
+    Wire.begin(D10, D11); //D10, D11 
 
     SensorSettings imu_config;
     imu_config.gyroRange = 500;
@@ -143,6 +146,8 @@ void setup() {
 
     server = camstream_httpd_initialize();
 
+    xTaskCreate(motor_control_task, "mctld", 2048, NULL, 10, motor_control);
+
     // while(1);
 
 }
@@ -179,8 +184,6 @@ esp_err_t imustream_uri_handler(httpd_req_t* request) {
     float accel_x, accel_y, accel_z;
     float gyro_x, gyro_y, gyro_z;
     float temp;
-
-    imu.readAllAxesFloatData(&accel_x);
     
     char imu_res_buf[256];
 
@@ -204,7 +207,7 @@ esp_err_t ws_connect_url_handler(httpd_req_t* request) {
 
     esp_websocket_client_config_t ws_config = {};
 
-    ws_config.subprotocol = "soap";
+    //ws_config.subprotocol = "soap";
 
     char * url_field_name = "Ws-Url";
     char * port_field_name = "Ws-Port";
@@ -242,18 +245,59 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
     switch(handler_call_reason) {
         case WEBSOCKET_EVENT_CONNECTED:
             Serial.println("Websocket connected");
+            esp_websocket_client_send(data->client, (const char*)"Hello, world!", 14, pdMS_TO_TICKS(100));
         break;
         case WEBSOCKET_EVENT_DISCONNECTED:
             
         break;
         case WEBSOCKET_EVENT_DATA:
-            Serial.printf("Data from ws\r\n%s\n", data->data_ptr);
+            if(data->op_code == 0x01 | data->op_code == 0x02) { // 0x01 -> ws proto text op code / 0x02 -> ws proto bin op code
+                Serial.printf("Data from ws\r\n0x%s\n", data->data_ptr);
+                
+                basic_input* packet = (basic_input*) data->data_ptr;
+
+                if(packet->input_cmd == CMD_BEND_FORWARD && motor_control != nullptr) {
+                    xTaskNotify(motor_control, 0x0f, eSetBits);
+                }
+
+                Serial.printf("packet type -> %x, input -> %c\n", packet->packet_id, packet->input_cmd);
+            } else if(data->op_code == 0x0A) { // 0x09 -> ws proto outgoing server heartbeat / 0x0A -> incoming heartbeat
+                return;
+            }
         break;
         case WEBSOCKET_EVENT_ERROR:
         break;
     }
 }
 
+void motor_control_task(void* parameters) {
+
+
+    for(;;) {
+        uint32_t notify = ulTaskNotifyTake(true, pdMS_TO_TICKS(25));
+
+        if(notify == NULL) {
+            continue;
+        }
+        
+        motor_driver.MotorDrive(
+            1,
+            notify & 0x01 ? 100 : 0,
+            notify & 0x02
+        );
+
+        motor_driver.MotorDrive(
+            2,
+            notify & 0x04 ? 100 : 0,
+            notify & 0x08
+        );
+
+        vTaskDelay(pdMS_TO_TICKS(25));
+
+        motor_driver.MotorDrive(1, 0, false);
+        motor_driver.MotorDrive(2, 0, false);
+    }
+}
 
 httpd_handle_t camstream_httpd_initialize() {
 
