@@ -272,6 +272,7 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
 
 void motor_control_task(void* parameters) {
 
+    (void) parameters;
 
     for(;;) {
         uint32_t notify = ulTaskNotifyTake(true, pdMS_TO_TICKS(25));
