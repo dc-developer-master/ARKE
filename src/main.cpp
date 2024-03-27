@@ -59,6 +59,7 @@ LSM6DSM imu;
 DualMotorDriver motor_driver;
 
 TaskHandle_t* motor_control = NULL;
+EventGroupHandle_t event_group = NULL;
 
 void setup() {
 
@@ -146,7 +147,9 @@ void setup() {
 
     server = camstream_httpd_initialize();
 
-    xTaskCreate(motor_control_task, "mctld", 2048, NULL, 10, motor_control);
+    event_group = xEventGroupCreate();
+
+    xTaskCreate(motor_control_task, "mctld", 2048, NULL, 5, motor_control);
 
     // while(1);
 
@@ -206,6 +209,7 @@ esp_err_t imustream_uri_handler(httpd_req_t* request) {
 esp_err_t ws_connect_url_handler(httpd_req_t* request) {
 
     esp_websocket_client_config_t ws_config = {};
+    ws_config.task_prio = 10;
 
     //ws_config.subprotocol = "soap";
 
@@ -252,12 +256,36 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
         break;
         case WEBSOCKET_EVENT_DATA:
             if(data->op_code == 0x01 | data->op_code == 0x02) { // 0x01 -> ws proto text op code / 0x02 -> ws proto bin op code
-                Serial.printf("Data from ws\r\n0x%s\n", data->data_ptr);
                 
                 basic_input* packet = (basic_input*) data->data_ptr;
 
-                if(packet->input_cmd == CMD_BEND_FORWARD && motor_control != nullptr) {
-                    xTaskNotify(motor_control, 0x0f, eSetBits);
+                if(packet->input_cmd == CMD_BEND_FORWARD) {
+                    Serial.println("Sending to mctld");
+                    xEventGroupSetBits(event_group, 0x0f);
+                }
+                
+                if(packet->input_cmd == CMD_BEND_UP) {
+                    xEventGroupSetBits(event_group, 0x0d);
+                }
+
+                if(packet->input_cmd == CMD_BEND_DOWN) {
+                    xEventGroupSetBits(event_group, 0x07);
+                }
+
+                if(packet->input_cmd == CMD_GO_FORWARD) {
+                    xEventGroupSetBits(event_group, 0x0f);
+                }
+
+                if(packet->input_cmd == CMD_GO_BACKWARD) {
+                    xEventGroupSetBits(event_group, 0x05);
+                }
+
+                if(packet->input_cmd == CMD_STOP_GOING) {
+                    xEventGroupSetBits(event_group, 0x00);
+                }
+
+                if(packet->input_cmd == CMD_SQUIRM) {
+                    xEventGroupSetBits(event_group, 0x0d);
                 }
 
                 Serial.printf("packet type -> %x, input -> %c\n", packet->packet_id, packet->input_cmd);
@@ -275,25 +303,23 @@ void motor_control_task(void* parameters) {
     (void) parameters;
 
     for(;;) {
-        uint32_t notify = ulTaskNotifyTake(true, pdMS_TO_TICKS(25));
+        uint32_t event_bits = xEventGroupWaitBits(event_group, 0x0f, pdTRUE, pdFALSE, portMAX_DELAY);
 
-        if(notify == NULL) {
-            continue;
-        }
+        Serial.printf("Event received from ws task 0x%x\n", event_bits);
         
         motor_driver.MotorDrive(
             1,
-            notify & 0x01 ? 100 : 0,
-            notify & 0x02
+            event_bits & 0x01 ? 100 : 0,
+            event_bits & 0x02
         );
 
         motor_driver.MotorDrive(
             2,
-            notify & 0x04 ? 100 : 0,
-            notify & 0x08
+            event_bits & 0x04 ? 100 : 0,
+            event_bits & 0x08
         );
 
-        vTaskDelay(pdMS_TO_TICKS(25));
+        vTaskDelay(pdMS_TO_TICKS(10));
 
         motor_driver.MotorDrive(1, 0, false);
         motor_driver.MotorDrive(2, 0, false);
