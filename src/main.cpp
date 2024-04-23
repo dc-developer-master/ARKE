@@ -294,10 +294,10 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
                     Serial.printf("packet type -> 0x%x, input -> %c\n", packet->packet_id, packet->input_cmd);
                 }
 
-                if(data->data_ptr == 0x02) {
+                if(data->data_ptr[0] == 0x02) {
                     sidestick_input* packet = (sidestick_input*) data->data_ptr;
 
-                    int speed = packet->y_axis == 0 : 0 ? (int)(((double) packet->y_axis / 5.12) - 100);
+                    int speed = packet->y_axis == 0 ? 0 : (int)(((double) packet->y_axis / 5.12) - 100);
                     int bits = speed | 0x200;
                     
                     if(speed > 0) {
