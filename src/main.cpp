@@ -152,7 +152,6 @@ void setup() {
     event_group = xEventGroupCreate();
 
     xTaskCreate(motor_control_task, "mctld", 2048, NULL, 5, motor_control);
-    xTaskCreate(audio_sender_task, "asendctld", 4096, NULL, 5, audio_send);
 
     // while(1);
 
