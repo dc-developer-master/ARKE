@@ -61,7 +61,6 @@ LSM6DSM imu;
 DualMotorDriver motor_driver;
 
 TaskHandle_t* motor_control = NULL;
-TaskHandle_t* audio_send = NULL;
 EventGroupHandle_t event_group = NULL;
 
 void setup() {
@@ -310,6 +309,7 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
 
                     Serial.printf("sent 0x%x to mctld", bits);
                 }
+
             } else if(data->op_code == 0x0A) { // 0x09 -> ws proto outgoing server heartbeat / 0x0A -> incoming heartbeat
                 return;
             }
@@ -324,6 +324,7 @@ void motor_control_task(void* parameters) {
     (void) parameters;
 
     for(;;) {
+        
         uint32_t event_bits = xEventGroupWaitBits(event_group, 0x3ff, pdTRUE, pdFALSE, portMAX_DELAY);
 
         if(event_bits & 0x200) {
