@@ -13,6 +13,8 @@
 #include <esp_websocket_client.h>
 #include "protocol.h"
 
+#define CONFIG_ARDUHAL_LOG_DEFAULT_LEVEL ARDUHAL_LOG_LEVEL_VERBOSE
+
 #define PART_BOUNDARY "123456789000000000000987654321"
 
 const char* ssid = WIFI_SSID;
@@ -59,6 +61,7 @@ LSM6DSM imu;
 DualMotorDriver motor_driver;
 
 TaskHandle_t* motor_control = NULL;
+TaskHandle_t* audio_send = NULL;
 EventGroupHandle_t event_group = NULL;
 
 void setup() {
@@ -150,6 +153,7 @@ void setup() {
     event_group = xEventGroupCreate();
 
     xTaskCreate(motor_control_task, "mctld", 2048, NULL, 5, motor_control);
+    xTaskCreate(audio_sender_task, "asendctld", 4096, NULL, 5, audio_send);
 
     // while(1);
 
@@ -256,39 +260,56 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
         break;
         case WEBSOCKET_EVENT_DATA:
             if(data->op_code == 0x01 | data->op_code == 0x02) { // 0x01 -> ws proto text op code / 0x02 -> ws proto bin op code
-                
-                basic_input* packet = (basic_input*) data->data_ptr;
 
-                if(packet->input_cmd == CMD_BEND_FORWARD) {
-                    Serial.println("Sending to mctld");
-                    xEventGroupSetBits(event_group, 0x0f);
-                }
-                
-                if(packet->input_cmd == CMD_BEND_UP) {
-                    xEventGroupSetBits(event_group, 0x0d);
+                if(data->data_ptr[0] == 0x01) {
+                    basic_input* packet = (basic_input*) data->data_ptr;
+
+                    if(packet->input_cmd == CMD_BEND_FORWARD) {
+                        Serial.println("Sending to mctld");
+                        xEventGroupSetBits(event_group, 0x0f);
+                    }
+                    
+                    if(packet->input_cmd == CMD_BEND_UP) {
+                        xEventGroupSetBits(event_group, 0x0d);
+                    }
+
+                    if(packet->input_cmd == CMD_BEND_DOWN) {
+                        xEventGroupSetBits(event_group, 0x07);
+                    }
+
+                    if(packet->input_cmd == CMD_GO_FORWARD) {
+                        xEventGroupSetBits(event_group, 0x0f);
+                    }
+
+                    if(packet->input_cmd == CMD_GO_BACKWARD) {
+                        xEventGroupSetBits(event_group, 0x05);
+                    }
+
+                    if(packet->input_cmd == CMD_STOP_GOING) {
+                        xEventGroupSetBits(event_group, 0x00);
+                    }
+
+                    if(packet->input_cmd == CMD_SQUIRM) {
+                        xEventGroupSetBits(event_group, 0x0d);
+                    }
+
+                    Serial.printf("packet type -> 0x%x, input -> %c\n", packet->packet_id, packet->input_cmd);
                 }
 
-                if(packet->input_cmd == CMD_BEND_DOWN) {
-                    xEventGroupSetBits(event_group, 0x07);
-                }
+                if(data->data_ptr == 0x02) {
+                    sidestick_input* packet = (sidestick_input*) data->data_ptr;
 
-                if(packet->input_cmd == CMD_GO_FORWARD) {
-                    xEventGroupSetBits(event_group, 0x0f);
-                }
+                    int speed = packet->y_axis == 0 : 0 ? (int)(((double) packet->y_axis / 5.12) - 100);
+                    int bits = speed | 0x200;
+                    
+                    if(speed > 0) {
+                        bits |= 0x100;
+                    }
 
-                if(packet->input_cmd == CMD_GO_BACKWARD) {
-                    xEventGroupSetBits(event_group, 0x05);
-                }
+                    xEventGroupSetBits(event_group, bits);
 
-                if(packet->input_cmd == CMD_STOP_GOING) {
-                    xEventGroupSetBits(event_group, 0x00);
+                    Serial.printf("sent 0x%x to mctld", bits);
                 }
-
-                if(packet->input_cmd == CMD_SQUIRM) {
-                    xEventGroupSetBits(event_group, 0x0d);
-                }
-
-                Serial.printf("packet type -> %x, input -> %c\n", packet->packet_id, packet->input_cmd);
             } else if(data->op_code == 0x0A) { // 0x09 -> ws proto outgoing server heartbeat / 0x0A -> incoming heartbeat
                 return;
             }
@@ -303,7 +324,27 @@ void motor_control_task(void* parameters) {
     (void) parameters;
 
     for(;;) {
-        uint32_t event_bits = xEventGroupWaitBits(event_group, 0x0f, pdTRUE, pdFALSE, portMAX_DELAY);
+        uint32_t event_bits = xEventGroupWaitBits(event_group, 0x3ff, pdTRUE, pdFALSE, portMAX_DELAY);
+
+        if(event_bits & 0x200) {
+            uint8_t speed = event_bits & 0x0ff;
+            bool direction = event_bits & 0x100;
+
+            motor_driver.MotorDrive(
+                1,
+                speed,
+                direction
+            );
+
+            motor_driver.MotorDrive(
+                1,
+                speed,
+                direction
+            );
+
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
 
         Serial.printf("Event received from ws task 0x%x\n", event_bits);
         

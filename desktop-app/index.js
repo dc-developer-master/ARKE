@@ -3,12 +3,13 @@ const ws = require("ws");
 const hid = require("node-hid");
 const path = require("path");
 const http = require("http");
+const os = require("os");
 const axios = require("axios").default;
 
 const device = new hid.HID(1133, 49685);
 const websocketServer = new ws.WebSocketServer({ port: 4567 });
 
-const client = {};
+const client = [];
 
 function createWindow() {
     const window = new BrowserWindow({
@@ -24,7 +25,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
 
-    initializeWebsocket("ws://192.168.1.8/", 4567);
+    initializeWebsocket(`ws://${getLocalIP()}`, 4567);
 
     createWindow();
 
@@ -83,7 +84,7 @@ function handle_hid(data) {
     buffer.writeUInt8(controls.view);
     buffer.writeUInt8(controls.throttle);
     buffer.writeUint16LE(controls.buttons);
-    //websocketServer.clients[0].send(buffer);
+    //websocketServer.clients[client[0]].send(buffer);
 }
 
 ipcMain.on("onKeyboardInput", (event, key) => {
@@ -91,13 +92,14 @@ ipcMain.on("onKeyboardInput", (event, key) => {
     buffer.writeUInt8(0x01);
     buffer.write(key);
 
-    websocketServer.clients[0].send(buffer);
+    //websocketServer.clients[client[0]].send(buffer);
     // delete buffer;
 });
 
 function websocketHandleConnection(socket, url) {
     //socket.nrId = 0;
     socket.send("hello");
+    clients[0] = socket.nrId;
 }
 
 function initializeWebsocket(wsUrl, wsPort) {
@@ -109,14 +111,13 @@ function initializeWebsocket(wsUrl, wsPort) {
     });
 }
 
-function getSelfIP() {
-    var ip = null;
-    var socket = net.createConnection(80, "google.com");
-
-    socket.on("connect", () => {
-        ip = socket.address().address;
-        socket.end();
-    })
-
-    return ip;
+function getLocalIP() {
+  const networkInterfaces = os.networkInterfaces();
+  for (const interface of Object.values(networkInterfaces)) {
+    for (const config of interface) {
+      if (config.family === 'IPv4' && !config.internal) {
+        return config.address;
+      }
+    }
+  }
 }
