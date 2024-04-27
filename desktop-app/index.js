@@ -112,12 +112,12 @@ function initializeWebsocket(wsUrl, wsPort) {
 }
 
 function getLocalIP() {
-  const networkInterfaces = os.networkInterfaces();
-  for (const interface of Object.values(networkInterfaces)) {
-    for (const config of interface) {
-      if (config.family === 'IPv4' && !config.internal) {
-        return config.address;
-      }
+    const networkInterfaces = os.networkInterfaces();
+    for (const interface of Object.values(networkInterfaces)) {
+        for (const config of interface) {
+            if (config.family === 'IPv4' && !config.internal) {
+                return config.address;
+            }
+        }
     }
-  }
 }
