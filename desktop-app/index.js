@@ -9,8 +9,6 @@ const axios = require("axios").default;
 const device = new hid.HID(1133, 49685);
 const websocketServer = new ws.WebSocketServer({ port: 4567 });
 
-const client = [];
-
 function createWindow() {
     const window = new BrowserWindow({
         width: 800,
@@ -77,29 +75,29 @@ function handle_hid(data) {
     
     BrowserWindow.getAllWindows()[0].webContents.send("onSidestickInput", controls);
     const buffer = Buffer.alloc(11);
-    buffer.writeUInt8(0x02);
-    buffer.writeUInt16LE(controls.roll);
-    buffer.writeUInt16LE(controls.pitch);
-    buffer.writeUInt16LE(controls.yaw);
-    buffer.writeUInt8(controls.view);
-    buffer.writeUInt8(controls.throttle);
-    buffer.writeUint16LE(controls.buttons);
-    //websocketServer.clients[client[0]].send(buffer);
+    buffer.writeUInt8(0x02, 0);
+    buffer.writeUInt16LE(controls.roll, 1);
+    buffer.writeUInt16LE(controls.pitch, 3);
+    buffer.writeUInt16LE(controls.yaw, 5);
+    buffer.writeUInt8(controls.view, 6);
+    buffer.writeUInt8(controls.throttle, 7);
+    buffer.writeUint16LE(controls.buttons, 8);
+    
+    sendBroadcastData(buffer);
+    delete buffer;
 }
 
 ipcMain.on("onKeyboardInput", (event, key) => {
     const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(0x01);
-    buffer.write(key);
+    buffer.writeUInt8(0x01, 0);
+    buffer.write(key, 1);
 
-    //websocketServer.clients[client[0]].send(buffer);
-    // delete buffer;
+    sendBroadcastData(buffer);
+    delete buffer;
 });
 
 function websocketHandleConnection(socket, url) {
-    //socket.nrId = 0;
-    socket.send("hello");
-    clients[0] = socket.nrId;
+    console.log("new client connected");
 }
 
 function initializeWebsocket(wsUrl, wsPort) {
@@ -121,3 +119,17 @@ function getLocalIP() {
         }
     }
 }
+
+function sendBroadcastData(buffer) {
+
+    for(const client of websocketServer.clients) {
+        client.send(buffer);
+    }
+}
+
+process.on("SIGINT", () => {
+    websocketServer.close();
+    device.close();
+    app.quit();
+    process.exit();
+});
