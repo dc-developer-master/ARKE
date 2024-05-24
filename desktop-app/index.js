@@ -1,19 +1,21 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
-const ws = require("ws");
+const { WebSocketServer } = require("ws");
 const hid = require("node-hid");
 const path = require("path");
 const http = require("http");
 const os = require("os");
+const cluster = require("cluster").default;
 const axios = require("axios").default;
 
-const device = new hid.HID(1133, 49685);
-const websocketServer = new ws.WebSocketServer({ port: 4567 });
+var device = new hid.HID(1133, 49685);
+const websocketServer = new WebSocketServer({ port: 4567 });
 
 function createWindow() {
     const window = new BrowserWindow({
         width: 800,
         height: 600,
         webPreferences: {
+            nodeIntegration: true,
             preload: path.join(__dirname, "preload.js")
         }
     });
@@ -23,7 +25,9 @@ function createWindow() {
 
 app.whenReady().then(() => {
 
-    initializeWebsocket(`ws://${getLocalIP()}`, 4567);
+    ipcMain.on("onKeyboardInput", handleKeyboardInput);
+
+    initializeWebsocket(`ws://${getLocalIP()}:8000/`, 8000);
 
     createWindow();
 
@@ -35,7 +39,6 @@ app.whenReady().then(() => {
 
     device.on("data", handle_hid);
 
-    websocketServer.on("connection", websocketHandleConnection);
 });
 
 
@@ -83,21 +86,19 @@ function handle_hid(data) {
     buffer.writeUInt8(controls.throttle, 7);
     buffer.writeUint16LE(controls.buttons, 8);
     
-    sendBroadcastData(buffer);
+    //sendBroadcastData(buffer);
     delete buffer;
 }
 
-ipcMain.on("onKeyboardInput", (event, key) => {
+function handleKeyboardInput(event, key) {
     const buffer = Buffer.alloc(2);
     buffer.writeUInt8(0x01, 0);
     buffer.write(key, 1);
 
     sendBroadcastData(buffer);
     delete buffer;
-});
 
-function websocketHandleConnection(socket, url) {
-    console.log("new client connected");
+    console.log(key);
 }
 
 function initializeWebsocket(wsUrl, wsPort) {
@@ -107,6 +108,7 @@ function initializeWebsocket(wsUrl, wsPort) {
             "Ws-Port": wsPort
         }
     });
+
 }
 
 function getLocalIP() {
@@ -127,9 +129,9 @@ function sendBroadcastData(buffer) {
     }
 }
 
-process.on("SIGINT", () => {
-    websocketServer.close();
-    device.close();
-    app.quit();
-    process.exit();
+websocketServer.on("connection", (socket, req) => {
+
+    socket.on("message", buf => {
+        console.log(buf);
+    });
 });

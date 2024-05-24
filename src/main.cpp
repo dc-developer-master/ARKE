@@ -168,6 +168,7 @@ esp_err_t camstream_url_handler(httpd_req_t* request) {
     camera_fb_t* framebuffer = esp_camera_fb_get();
 
     while(status == ESP_OK) {
+
         framebuffer = esp_camera_fb_get();
 
         int part_buf_len = snprintf(part_buf, 64, _STREAM_PART, framebuffer->len);
@@ -180,7 +181,6 @@ esp_err_t camstream_url_handler(httpd_req_t* request) {
         esp_camera_fb_return(framebuffer);
     }
 
-
     return ESP_OK;
 }
 
@@ -189,6 +189,10 @@ esp_err_t imustream_uri_handler(httpd_req_t* request) {
     float accel_x, accel_y, accel_z;
     float gyro_x, gyro_y, gyro_z;
     float temp;
+
+    accel_x = imu.readFloatAccelX(); accel_y = imu.readFloatAccelY(); accel_z = imu.readFloatAccelZ();
+    gyro_x = imu.readFloatGyroX(); gyro_y = imu.readFloatGyroY(); accel_z = imu.readFloatGyroZ();
+    temp = imu.readTempC();
     
     char imu_res_buf[256];
 
@@ -212,8 +216,8 @@ esp_err_t ws_connect_url_handler(httpd_req_t* request) {
 
     esp_websocket_client_config_t ws_config = {};
     ws_config.task_prio = 10;
-
-    //ws_config.subprotocol = "soap";
+    ws_config.disable_auto_reconnect = true;
+    ws_config.subprotocol = "http";
 
     char * url_field_name = "Ws-Url";
     char * port_field_name = "Ws-Port";
@@ -239,7 +243,9 @@ esp_err_t ws_connect_url_handler(httpd_req_t* request) {
 
     if(esp_websocket_client_is_connected(websocket_handle)) Serial.println("new ws");
 
-    httpd_resp_send_404(request);
+    const char* status = "200 OK";
+
+    httpd_resp_send(request, status, 6);
 
     return ESP_OK;
 }
@@ -306,7 +312,7 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
 
                     xEventGroupSetBits(event_group, bits);
 
-                    Serial.printf("sent 0x%x to mctld", bits);
+                    Serial.printf("sent 0x%x to mctld\n", bits);
                 }
 
             } else if(data->op_code == 0x0A) { // 0x09 -> ws proto outgoing server heartbeat / 0x0A -> incoming heartbeat
@@ -314,6 +320,7 @@ void websocket_event_handler(void* handler_arg, esp_event_base_t event_base, int
             }
         break;
         case WEBSOCKET_EVENT_ERROR:
+            vTaskDelete(NULL);
         break;
     }
 }
@@ -364,6 +371,7 @@ void motor_control_task(void* parameters) {
 
         motor_driver.MotorDrive(1, 0, false);
         motor_driver.MotorDrive(2, 0, false);
+
     }
 }
 

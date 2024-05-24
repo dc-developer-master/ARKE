@@ -1,6 +1,6 @@
 const { WebSocketServer } = require("./desktop-app/node_modules/ws/index");
 
-const wss = new WebSocketServer({ port: 8080 });
+const wss = new WebSocketServer({ port: 4567 });
 
 wss.on('connection', function connection(ws) {
   ws.on('message', function message(data) {

@@ -2,7 +2,7 @@
 
 let canvas
 
-window.onload = () => {
+function initializeSidestickDrawer() {
     const canvas_element = document.getElementById("sidestick_pointer");
     canvas = canvas_element.getContext("2d");
 }

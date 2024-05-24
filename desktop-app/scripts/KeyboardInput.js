@@ -1,7 +1,8 @@
 
+const keyBindings = ["n", "u", "d", "f", "b", "s", "q"];
 
 function initializeKeyboardInputSystem() {
-    document.addEventListener("keypress", handleKeyboardInput);
+    document.addEventListener("keydown", handleKeyboardInput);
 }
 
 
@@ -10,15 +11,22 @@ function initializeKeyboardInputSystem() {
  * @param {Document} document
  * @param {KeyboardEvent} event 
  */
-function handleKeyboardInput(document, event) {
+async function handleKeyboardInput(event) {
 
-    const key = event.key.replace("Key", "").toLowerCase();
+    // deprecated
+    // const key = event.key.replace("Key", "").toLowerCase();
+    // (key in ["n", "u", "d", "f", "b", "s", "q"])
+
+    const key = event.key;
 
     if(
-        !(key in ["n", "u", "d", "f", "b", "s", "q"])
+        keyBindings.indexOf(key) < 0
     ) {
         return;
     }
 
+    console.log(key);
+
     window.electronAPI.onKeyboardInput(key);
+
 }
